@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	coff "sym-exposer/coff"
+	"unsafe"
 )
 
 func main() {
@@ -27,5 +28,17 @@ func main() {
 	bin := make([]byte, fi.Size())
 	f.Read(bin)
 
-	fmt.Println(coff.IsCoffX64(bin))
+	if coff.IsCoffX64(bin) {
+		var offset uint64 = 0
+		coffHdr, err := coff.ParseCoffHeader(bin)
+		if err != nil {
+			panic(err)
+		}
+		coffHdr.Show()
+
+		size := unsafe.Sizeof(coffHdr)
+		offset += uint64(size)
+		coff.ParseSections(bin, &coffHdr)
+	}
+
 }
