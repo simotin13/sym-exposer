@@ -103,3 +103,9 @@ func GetCoffString(bin []byte, offset uint64) string {
 	}
 	return str
 }
+
+func FromUint32ToLeBytes(val uint32) []byte {
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, val)
+	return buf
+}

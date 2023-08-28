@@ -1481,6 +1481,11 @@ const (
 	STT_SECTION = 3
 	STT_FILE    = 4
 )
+const (
+	STB_LOCAL  = 0
+	STB_GLOBAL = 1
+	STB_WEAK   = 2
+)
 
 var symTypes [16]string = [16]string{
 	"NOTYPE",
