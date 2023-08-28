@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	coff "sym-exposer/coff"
+	elf "sym-exposer/elf"
 	"unsafe"
 )
 
@@ -27,6 +28,10 @@ func main() {
 
 	bin := make([]byte, fi.Size())
 	f.Read(bin)
+
+	if elf.IsELF64(bin) {
+
+	}
 
 	if coff.IsCoffX64(bin) {
 		var offset uint64 = 0
