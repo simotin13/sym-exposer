@@ -9,19 +9,21 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage sym-exporser <target.obj>")
+	if len(os.Args) < 3 {
+		fmt.Println("Usage sym-exporser <target.obj> <sym_exposed.obj>")
 		os.Exit(-1)
 	}
 	// check target module is exist
 	var filePath = os.Args[1]
 	fi, err := os.Stat(filePath)
 	if err != nil {
+		fmt.Println("Error: ", err)
 		os.Exit(-1)
 	}
 
 	f, err := os.Open(filePath)
 	if err != nil {
+		fmt.Println("Error: ", err)
 		os.Exit(-1)
 	}
 	defer f.Close()
@@ -58,16 +60,16 @@ func main() {
 		shStrSec := shdrs[strShIdx]
 		endOffset := shStrSec.Sh_offset + shStrSec.Sh_size
 		strtbl := bin[shStrSec.Sh_offset:endOffset]
-		shIdx, exist := sectionNameMap[".symtab"]
+		symTabShIdx, exist := sectionNameMap[".symtab"]
 
 		shdrSize := uint64(unsafe.Sizeof(elf.Elf64_Shdr{}))
-		symTabShdrOffset := shdrOffset + uint64(shIdx)*shdrSize
+		symTabShdrOffset := shdrOffset + uint64(symTabShIdx)*shdrSize
 		if !exist {
-			panic("not found .strtab section")
+			panic("not found .symtab section")
 		}
-		sh := shdrs[shIdx]
-		endOffset = sh.Sh_offset + sh.Sh_size
-		var offset uint64 = sh.Sh_offset
+		symTabSh := shdrs[symTabShIdx]
+		endOffset = symTabSh.Sh_offset + symTabSh.Sh_size
+		var offset uint64 = symTabSh.Sh_offset
 
 		var localSymIdx uint32 = 0
 		var lastLocalSymIdx uint32 = 0
@@ -78,20 +80,18 @@ func main() {
 
 			symName := ""
 			strOffset := elf64Sym.St_name
-			fmt.Printf("strOffset: %d\n", strOffset)
 			for strtbl[strOffset] != 0 {
 				symName += string(strtbl[strOffset])
 				strOffset++
 			}
 
 			elf64Sym.St_info = bin[offset]
-			fmt.Printf("symName: [%s]\n", symName)
 			bind := (elf64Sym.St_info >> 4)
 			if bind == elf.STB_LOCAL {
 				localSymIdx++
 			}
 
-			// シンボルが関数で可視性がローカルであればグローバルに変更する
+			// set STB_GLOBAL if symbol is STB_LOCAL
 			lastLocalSymIdx = localSymIdx
 			if elf64Sym.St_info&0x0F == elf.STT_FUNC {
 				if bind == elf.STB_LOCAL {
@@ -101,20 +101,24 @@ func main() {
 			}
 			offset += uint64(unsafe.Sizeof(uint8(0)))
 
+			// skip st_other
 			elf64Sym.St_other = bin[offset]
 			offset += uint64(unsafe.Sizeof(uint8(0)))
 
+			// skip st_shndx
 			elf64Sym.St_shndx, _ = binutil.FromLeToUInt16(bin[offset:])
 			offset += uint64(unsafe.Sizeof(elf.Elf64_Half(0)))
 
+			// skip st_value
 			elf64Sym.St_value, _ = binutil.FromLeToUInt64(bin[offset:])
 			offset += uint64(unsafe.Sizeof(elf.Elf64_Addr(0)))
 
+			// skip st_size
 			elf64Sym.St_size, _ = binutil.FromLeToUInt64(bin[offset:])
 			offset += uint64(unsafe.Sizeof(elf.Elf64_Xword(0)))
 		}
 
-		fmt.Printf("lastLocalSymIdx: %d\n", lastLocalSymIdx)
+		// need to update section header info
 		var elf64Shdr = elf.Elf64_Shdr{}
 		offset = symTabShdrOffset
 
@@ -139,19 +143,21 @@ func main() {
 		elf64Shdr.Sh_link, _ = binutil.FromLeToUInt32(bin[offset:])
 		offset += uint64(unsafe.Sizeof(elf.Elf64_Word(0)))
 
-		// シンボルテーブルのSh_infoを書き換える(最後のローカルシンボルのインデックス+1を指すようにする)
+		// update sh_info, sh_info must be last local symbol index + 1
 		bytes := binutil.FromUint32ToLeBytes(lastLocalSymIdx)
-		fmt.Printf("lastLocalSymIdx: %d\n", lastLocalSymIdx)
-		fmt.Printf("bytes: %v\n", bytes)
 		bin[offset] = bytes[0]
 		bin[offset+1] = bytes[1]
 		bin[offset+2] = bytes[2]
 		bin[offset+3] = bytes[3]
 
-		err := os.WriteFile("new.o", bin, 0644)
+		fmt.Println(os.Args[2])
+		err := os.WriteFile(os.Args[2], bin, 0644)
 		if err != nil {
 			fmt.Println("Error writing to file:", err)
 			return
 		}
+	} else {
+		fmt.Printf("%s is not ELF64\n", filePath)
+		os.Exit(-1)
 	}
 }
